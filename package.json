@@ -1,0 +1,15 @@
+{
+  "name": "IUIApp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "private": true,
+  "dependencies": {
+    "react-native-paper": "^5.14.5",
+    "react-native-vector-icons": "^10.3.0",
+    "styled-components": "^6.1.19"
+  }
+}

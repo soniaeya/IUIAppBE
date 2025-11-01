@@ -1,0 +1,9 @@
+cd MobileApp
+npx react-native start --reset-cache
+
+
+
+cd MobileApp
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot"
+npx react-native run-android
+
