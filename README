@@ -7,3 +7,5 @@ cd MobileApp
 $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot"
 npx react-native run-android
 
+
+Map API Key: AIzaSyDgne1zVrGt-GIf8s2ayoNs6kE3O4iVUXc
