@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from mongodb import users_collection, hash_password, verify_password
+from mongodb import users_collection
 
 app = FastAPI()
 
@@ -53,6 +53,9 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+class MapSearch(BaseModel):
+    searchQuery: str
+
 
 class UserOut(BaseModel):
     id: str
@@ -76,10 +79,9 @@ def signup(user: UserCreate):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Hash password and insert
-    hashed = hash_password(user.password)
     new_user = {
         "email": user.email,
-        "password_hash": hashed,
+        "password": user.password,
         "name": user.name,
     }
 
@@ -92,7 +94,8 @@ def signup(user: UserCreate):
 @app.post("/login")
 def login(data: LoginRequest):
     user = users_collection.find_one({"email": data.email})
-    if not user or not verify_password(data.password, user["password_hash"]):
+    password = users_collection.find_one({"password": data.password})
+    if not user or not password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return {
@@ -102,3 +105,9 @@ def login(data: LoginRequest):
         "email": user["email"],
         "name": user.get("name"),
     }
+
+
+@app.put("/map/search")
+def map_search(data: MapSearch):
+    print("Received search query:", data.searchQuery)
+    return {"status": "ok", "query": data.searchQuery}

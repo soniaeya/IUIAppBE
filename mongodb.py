@@ -2,18 +2,13 @@ from pymongo import MongoClient
 from passlib.context import CryptContext
 
 MONGODB_URI = "mongodb://localhost:27017"
+#connection_str="mongodb+srv://<db_username>:<db_password>@cluster0.5fl3opg.mongodb.net/"
 
 client = MongoClient(MONGODB_URI)
+#client=MongoClient(connection_str)
 
 db = client["iuiapp_db"]
 users_collection = db["users"]
 
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
