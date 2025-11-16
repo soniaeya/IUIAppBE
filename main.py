@@ -1,26 +1,17 @@
 import pytz
 from datetime import datetime
 
+from bson import ObjectId
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
+from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, UpdatePreferencesRequest
 from mongodb import users_collection
 
 app = FastAPI()
 
 
-# ---------- Preferences (your existing endpoint) ----------
-
-class Preferences(BaseModel):
-    activity: str
-    env: str    # "Indoor" / "Outdoor"
-    time: datetime  # ISO datetime from frontend
-
-
 @app.get("/")
 def root():
     return {"message": "API is running"}
-
 
 @app.post("/api/preferences/")
 def save_preferences(prefs: Preferences):
@@ -39,35 +30,10 @@ def save_preferences(prefs: Preferences):
         "formatted": time_str,
     }
 
-
-# ---------- Auth / Users (MongoDB) ----------
-
-class UserCreate(BaseModel):
-    # use str so you don't get 422 from invalid email formats
-    email: str
-    password: str
-    name: str | None = None
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class MapSearch(BaseModel):
-    searchQuery: str
-
-
-class UserOut(BaseModel):
-    id: str
-    email: str
-    name: str | None = None
-
-
 def user_doc_to_out(doc) -> UserOut:
     return UserOut(
         id=str(doc["_id"]),
-        email=doc["email"],
-        name=doc.get("name"),
+        email=doc["email"]
     )
 
 
@@ -78,11 +44,9 @@ def signup(user: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Hash password and insert
     new_user = {
         "email": user.email,
-        "password": user.password,
-        "name": user.name,
+        "password": user.password
     }
 
     result = users_collection.insert_one(new_user)
@@ -102,12 +66,28 @@ def login(data: LoginRequest):
         "status": "ok",
         "message": "Login successful",
         "user_id": str(user["_id"]),
-        "email": user["email"],
-        "name": user.get("name"),
+        "email": user["email"]
     }
-
 
 @app.put("/map/search")
 def map_search(data: MapSearch):
     print("Received search query:", data.searchQuery)
     return {"status": "ok", "query": data.searchQuery}
+
+@app.put("/user/preferences")
+def update_preferences(data: UpdatePreferencesRequest):
+    user_id = data.user_id
+    prefs = data.preferences.dict()
+
+    # Convert datetime to string if needed
+    prefs["time"] = prefs["time"].isoformat()
+
+    result = users_collection.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"preferences": prefs}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"status": "ok", "preferences": prefs}
