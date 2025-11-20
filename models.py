@@ -1,15 +1,28 @@
-from pydantic import BaseModel
-from datetime import datetime
-
 
 # ----------------------------------
 # Preferences
 # ----------------------------------
-class Preferences(BaseModel):
-    activity: str               # e.g., "Gym", "Martial arts", "Yoga"
-    env: str                    # "Indoor" or "Outdoor"
-    time: datetime              # ISO datetime from frontend
+from enum import Enum
 
+class ActivityEnum(str, Enum):
+    boxing = "Boxing"
+    kickboxing = "Kickboxing"
+    bjj = "BJJ"
+    muay_thai = "Muay Thai"
+    judo = "Judo"
+    Wrestling = "Wrestling"
+
+
+
+from pydantic import BaseModel
+from datetime import datetime
+from typing import List, Optional, Literal
+
+class Preferences(BaseModel):
+    activities: List[str] = []                # all active toggles
+    env: Optional[str] = None                 # or Literal["Indoor", "Outdoor"]
+    intensity: Optional[str] = None           # e.g. "Low", "Medium", "High"
+    time: datetime
 
 # ----------------------------------
 # Auth / Users

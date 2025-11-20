@@ -15,20 +15,14 @@ def root():
 
 @app.post("/api/preferences/")
 def save_preferences(prefs: Preferences):
-    montreal = pytz.timezone("America/Toronto")  # same zone for Montreal
-    local_dt = prefs.time.astimezone(montreal)
-    time_str = local_dt.strftime("%H:%M")
+    print("All activities:", prefs.activities)
+    print("Env:", prefs.env)
+    print("Intensity:", prefs.intensity)
+    print("Time:", prefs.time)
 
-    print("Activity:", prefs.activity)
-    print("Environment:", prefs.env)
-    print("Time:", time_str)
+    # here you’d save to MongoDB / SQL, etc.
+    return {"status": "ok", "saved": prefs.model_dump()}
 
-    return {
-        "status": "ok",
-        "activity": prefs.activity,
-        "env": prefs.env,
-        "formatted": time_str,
-    }
 
 def user_doc_to_out(doc) -> UserOut:
     return UserOut(
