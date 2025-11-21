@@ -3,7 +3,7 @@ from datetime import datetime
 
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
-from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, UpdatePreferencesRequest
+from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, UpdatePreferencesRequest, MapLocation
 from mongodb import users_collection
 
 app = FastAPI()
@@ -20,8 +20,8 @@ def save_preferences(prefs: Preferences):
     print("Intensity:", prefs.intensity)
     print("Time:", prefs.time)
 
-    # here you’d save to MongoDB / SQL, etc.
     return {"status": "ok", "saved": prefs.model_dump()}
+
 
 
 def user_doc_to_out(doc) -> UserOut:
@@ -85,3 +85,8 @@ def update_preferences(data: UpdatePreferencesRequest):
         raise HTTPException(status_code=404, detail="User not found")
 
     return {"status": "ok", "preferences": prefs}
+
+@app.post("/map/location")
+def save_location(loc: MapLocation):
+    print("User location:", loc.latitude, loc.longitude)
+    return {"status": "ok", "received": loc.model_dump()}

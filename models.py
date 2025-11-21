@@ -16,13 +16,26 @@ class ActivityEnum(str, Enum):
 
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional
+
+from pydantic import BaseModel
+
+class MapLocation(BaseModel):
+    latitude: float
+    longitude: float
+
+
+
+from pydantic import BaseModel
+from datetime import datetime
+from typing import List, Optional
 
 class Preferences(BaseModel):
     activities: List[str] = []                # all active toggles
-    env: Optional[str] = None                 # or Literal["Indoor", "Outdoor"]
+    env: Optional[str] = None                 # "Indoor" / "Outdoor"
     intensity: Optional[str] = None           # e.g. "Low", "Medium", "High"
     time: datetime
+
 
 # ----------------------------------
 # Auth / Users
