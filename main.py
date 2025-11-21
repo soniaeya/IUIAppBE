@@ -5,9 +5,41 @@ from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, UpdatePreferencesRequest, MapLocation
 from mongodb import users_collection
+from math import radians, sin, cos, asin, sqrt
 
 app = FastAPI()
 
+
+class UserState:
+    def __init__(self):
+        self.user_id: str | None = None
+        self.email: str | None = None
+
+        # location
+        self.latitude: float | None = None
+        self.longitude: float | None = None
+
+        # preferences
+        self.activities: list[str] = []
+        self.env: str | None = None
+        self.intensity: str | None = None
+        self.time: datetime | None = None
+
+    def set_user(self, user_id: str, email: str):
+        self.user_id = user_id
+        self.email = email
+
+    def set_location(self, lat: float, lon: float):
+        self.latitude = lat
+        self.longitude = lon
+
+    def set_preferences(self, prefs: Preferences):
+        self.activities = prefs.activities
+        self.env = prefs.env
+        self.intensity = prefs.intensity
+        self.time = prefs.time
+
+current_user = UserState()
 
 @app.get("/")
 def root():
@@ -15,10 +47,12 @@ def root():
 
 @app.post("/api/preferences/")
 def save_preferences(prefs: Preferences):
-    print("All activities:", prefs.activities)
-    print("Env:", prefs.env)
-    print("Intensity:", prefs.intensity)
-    print("Time:", prefs.time)
+    current_user.set_preferences(prefs)
+
+    print("Activities:", current_user.activities)
+    print("Env:", current_user.env)
+    print("Intensity:", current_user.intensity)
+    print("Time:", current_user.time)
 
     return {"status": "ok", "saved": prefs.model_dump()}
 
@@ -52,16 +86,19 @@ def signup(user: UserCreate):
 @app.post("/login")
 def login(data: LoginRequest):
     user = users_collection.find_one({"email": data.email})
-    password = users_collection.find_one({"password": data.password})
-    if not user or not password:
+
+    if not user or user["password"] != data.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    current_user.set_user(str(user["_id"]), user["email"])
 
     return {
         "status": "ok",
         "message": "Login successful",
-        "user_id": str(user["_id"]),
-        "email": user["email"]
+        "user_id": current_user.user_id,
+        "email": current_user.email
     }
+
 
 @app.put("/map/search")
 def map_search(data: MapSearch):
@@ -88,5 +125,17 @@ def update_preferences(data: UpdatePreferencesRequest):
 
 @app.post("/map/location")
 def save_location(loc: MapLocation):
-    print("User location:", loc.latitude, loc.longitude)
-    return {"status": "ok", "received": loc.model_dump()}
+    current_user.set_location(loc.latitude, loc.longitude)
+
+    print("User location:", current_user.latitude, current_user.longitude)
+
+    return {
+        "status": "ok",
+        "user_location": {
+            "latitude": current_user.latitude,
+            "longitude": current_user.longitude
+        }
+    }
+
+
+
