@@ -1,31 +1,52 @@
-import pytz
+# main.py
 from datetime import datetime
+from typing import Optional
 
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
-from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, UpdatePreferencesRequest, MapLocation
-from mongodb import users_collection
-from math import radians, sin, cos, asin, sqrt
+from pydantic import BaseModel
 
+from models import (
+    Preferences,
+    MapLocation,
+    UserCreate,
+    UserOut,
+    LoginRequest,
+    MapSearch,
+    UpdatePreferencesRequest,
+)
+from mongodb import users_collection
 from recommender_system import gyms_for_preferences
 
+
+# -------------------------------------------------
+# FastAPI app
+# -------------------------------------------------
 app = FastAPI()
 
 
+# -------------------------------------------------
+# In-memory "current user" state (for mobile session)
+# -------------------------------------------------
 class UserState:
     def __init__(self):
-        self.user_id: str | None = None
-        self.email: str | None = None
+        self.user_id: Optional[str] = None
+        self.email: Optional[str] = None
 
         # location
-        self.latitude: float | None = None
-        self.longitude: float | None = None
+        self.latitude: Optional[float] = None
+        self.longitude: Optional[float] = None
 
         # preferences
         self.activities: list[str] = []
-        self.env: str | None = None
-        self.intensity: str | None = None
-        self.time: datetime | None = None
+        self.env: Optional[str] = None
+        self.intensity: Optional[str] = None
+        self.time: Optional[datetime] = None
+
+        # weather (optional)
+        self.weather_main: Optional[str] = None
+        self.weather_description: Optional[str] = None
+        self.weather_temp_c: Optional[float] = None
 
     def set_user(self, user_id: str, email: str):
         self.user_id = user_id
@@ -41,14 +62,70 @@ class UserState:
         self.intensity = prefs.intensity
         self.time = prefs.time
 
+    def set_weather(self, main: str, description: Optional[str], temp_c: Optional[float]):
+        self.weather_main = main
+        self.weather_description = description
+        self.weather_temp_c = temp_c
+
+
 current_user = UserState()
 
+
+# -------------------------------------------------
+# Extra update models
+# -------------------------------------------------
+class LocationUpdateRequest(BaseModel):
+    user_id: str
+    location: MapLocation
+
+
+class TimeUpdateRequest(BaseModel):
+    user_id: str
+    time: datetime
+
+
+class WeatherUpdateRequest(BaseModel):
+    user_id: str
+    main: str
+    description: Optional[str] = None
+    temp_c: Optional[float] = None
+
+
+# -------------------------------------------------
+# Helpers
+# -------------------------------------------------
+def user_doc_to_out(doc) -> UserOut:
+    prefs_doc = doc.get("preferences")
+    prefs_obj = Preferences(**prefs_doc) if prefs_doc else None
+
+    return UserOut(
+        id=str(doc["_id"]),
+        email=doc["email"],
+        name=doc.get("name"),
+        preferences=prefs_obj,
+    )
+
+
+# -------------------------------------------------
+# Root
+# -------------------------------------------------
 @app.get("/")
 def root():
     return {"message": "API is running"}
 
+
+# -------------------------------------------------
+# Preferences: mobile POST (session) + DB PUT (by user_id)
+# -------------------------------------------------
 @app.post("/api/preferences/")
 def save_preferences(prefs: Preferences):
+    """
+    Called by the mobile app when the user saves preferences
+    on the Preferences screen.
+
+    - Updates in-memory current_user
+    - Returns what was saved
+    """
     current_user.set_preferences(prefs)
 
     print("Activities:", current_user.activities)
@@ -59,24 +136,45 @@ def save_preferences(prefs: Preferences):
     return {"status": "ok", "saved": prefs.model_dump()}
 
 
+@app.put("/user/preferences")
+def update_preferences(data: UpdatePreferencesRequest):
+    """
+    Writes preferences into the user's document in MongoDB.
+    """
+    user_id = data.user_id
+    prefs = data.preferences.model_dump()
 
-def user_doc_to_out(doc) -> UserOut:
-    return UserOut(
-        id=str(doc["_id"]),
-        email=doc["email"]
+    # Convert datetime to ISO for Mongo
+    if prefs.get("time"):
+        prefs["time"] = prefs["time"].isoformat()
+
+    result = users_collection.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"preferences": prefs}},
     )
 
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
 
+    return {"status": "ok", "preferences": prefs}
+
+
+# -------------------------------------------------
+# Auth
+# -------------------------------------------------
 @app.post("/signup", response_model=UserOut)
 def signup(user: UserCreate):
-    # Check if email already exists
+    """
+    Basic signup – stores email + plain password (you can plug hashing later).
+    """
     existing = users_collection.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     new_user = {
         "email": user.email,
-        "password": user.password
+        "password": user.password,
+        "name": user.name,
     }
 
     result = users_collection.insert_one(new_user)
@@ -87,6 +185,9 @@ def signup(user: UserCreate):
 
 @app.post("/login")
 def login(data: LoginRequest):
+    """
+    Simple login – verifies plain password, sets current_user info.
+    """
     user = users_collection.find_one({"email": data.email})
 
     if not user or user["password"] != data.password:
@@ -98,69 +199,150 @@ def login(data: LoginRequest):
         "status": "ok",
         "message": "Login successful",
         "user_id": current_user.user_id,
-        "email": current_user.email
+        "email": current_user.email,
     }
 
 
+# -------------------------------------------------
+# Map search echo (optional)
+# -------------------------------------------------
 @app.put("/map/search")
 def map_search(data: MapSearch):
     print("Received search query:", data.searchQuery)
     return {"status": "ok", "query": data.searchQuery}
 
-@app.put("/user/preferences")
-def update_preferences(data: UpdatePreferencesRequest):
-    user_id = data.user_id
-    prefs = data.preferences.dict()
 
-    # Convert datetime to string if needed
-    prefs["time"] = prefs["time"].isoformat()
+# -------------------------------------------------
+# Location endpoints
+# -------------------------------------------------
+@app.post("/map/location")
+def save_location(loc: MapLocation):
+    """
+    Body MUST be: { "latitude": <float>, "longitude": <float> }
+    """
+    # if you have current_user:
+    # current_user.set_location(loc.latitude, loc.longitude)
 
+    print("User location:", loc.latitude, loc.longitude)
+
+    return {
+        "status": "ok",
+        "user_location": {
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        },
+    }
+
+
+@app.put("/user/location", response_model=UserOut)
+def api_update_location(payload: LocationUpdateRequest):
+    """
+    Writes the location into the user's MongoDB document.
+    """
     result = users_collection.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"preferences": prefs}}
+        {"_id": ObjectId(payload.user_id)},
+        {
+            "$set": {
+                "location": {
+                    "latitude": payload.location.latitude,
+                    "longitude": payload.location.longitude,
+                }
+            }
+        },
     )
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return {"status": "ok", "preferences": prefs}
+    # Also mirror into current_user if this is the active one
+    if current_user.user_id == payload.user_id:
+        current_user.set_location(
+            payload.location.latitude,
+            payload.location.longitude,
+        )
 
-@app.post("/map/location")
-def save_location(loc: MapLocation):
-    current_user.set_location(loc.latitude, loc.longitude)
-
-    print("User location:", current_user.latitude, current_user.longitude)
-
-    return {
-        "status": "ok",
-        "user_location": {
-            "latitude": current_user.latitude,
-            "longitude": current_user.longitude
-        }
-    }
+    saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
+    return user_doc_to_out(saved)
 
 
+# -------------------------------------------------
+# Time update
+# -------------------------------------------------
+@app.put("/user/time", response_model=UserOut)
+def api_update_time(payload: TimeUpdateRequest):
+    """
+    Updates only the time of day in the user's preferences.
+    """
+    user = users_collection.find_one({"_id": ObjectId(payload.user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prefs_doc = user.get("preferences") or {}
+    prefs_doc["time"] = payload.time.isoformat()
+
+    users_collection.update_one(
+        {"_id": ObjectId(payload.user_id)},
+        {"$set": {"preferences": prefs_doc}},
+    )
+
+    if current_user.user_id == payload.user_id:
+        current_user.time = payload.time
+
+    saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
+    return user_doc_to_out(saved)
+
+
+# -------------------------------------------------
+# Weather update
+# -------------------------------------------------
+@app.put("/user/weather")
+def api_update_weather(payload: WeatherUpdateRequest):
+    """
+    Stores the latest weather forecast for this user.
+    """
+    users_collection.update_one(
+        {"_id": ObjectId(payload.user_id)},
+        {
+            "$set": {
+                "weather": {
+                    "main": payload.main,
+                    "description": payload.description,
+                    "temp_c": payload.temp_c,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            }
+        },
+    )
+
+    if current_user.user_id == payload.user_id:
+        current_user.set_weather(payload.main, payload.description, payload.temp_c)
+
+    return {"status": "ok", "weather": payload.dict()}
+
+
+# -------------------------------------------------
+# Recommendations
+# -------------------------------------------------
 @app.get("/recommendations")
 def get_recommendations():
-    # Ensure preferences exist
+    """
+    Uses current_user's in-memory preferences + location to
+    get a list of matching gym names from recommender_system.gyms_for_preferences.
+    """
     if not current_user.activities or not current_user.env or not current_user.intensity:
         raise HTTPException(status_code=400, detail="User preferences not set")
 
-    # (Location may or may not be set → recommender handles both cases)
-    user_lat = current_user.latitude
-    user_lon = current_user.longitude
+    gym_names = gyms_for_preferences(
+        activities=current_user.activities,
+        env=current_user.env,
+        intensity=current_user.intensity,
+        user_lat=current_user.latitude,
+        user_lon=current_user.longitude,
+    )
 
-    try:
-        gym_names = gyms_for_preferences(
-            activities=current_user.activities,
-            env=current_user.env,
-            intensity=current_user.intensity,
-            user_lat=user_lat,
-            user_lon=user_lon,
-        )
-        return {"status": "ok", "gyms": gym_names}
-    except Exception as e:
-        # This prevents ugly tracebacks and makes debugging easier.
-        print("Error computing recommendations:", repr(e))
-        # If something truly unexpected happens, still return a clean message.
-        raise HTTPException(status_code=500, detail="Internal recommender error")
+    print("Matched locations:", gym_names)
+
+    return {
+        "status": "ok",
+        "gyms": gym_names,
+    }

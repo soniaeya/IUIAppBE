@@ -87,5 +87,6 @@ def gyms_for_preferences(activities, env, intensity, user_lat=None, user_lon=Non
             else float("inf")
         )
 
-    # You only need names for the frontend carousel
+    print("Matched locations:", [g["name"] for g in results])
+
     return [g["name"] for g in results]
