@@ -7,6 +7,8 @@ from models import LoginRequest, MapSearch, Preferences, UserCreate, UserOut, Up
 from mongodb import users_collection
 from math import radians, sin, cos, asin, sqrt
 
+from recommender_system import gyms_for_preferences
+
 app = FastAPI()
 
 
@@ -138,4 +140,27 @@ def save_location(loc: MapLocation):
     }
 
 
+@app.get("/recommendations")
+def get_recommendations():
+    # Ensure preferences exist
+    if not current_user.activities or not current_user.env or not current_user.intensity:
+        raise HTTPException(status_code=400, detail="User preferences not set")
 
+    # (Location may or may not be set → recommender handles both cases)
+    user_lat = current_user.latitude
+    user_lon = current_user.longitude
+
+    try:
+        gym_names = gyms_for_preferences(
+            activities=current_user.activities,
+            env=current_user.env,
+            intensity=current_user.intensity,
+            user_lat=user_lat,
+            user_lon=user_lon,
+        )
+        return {"status": "ok", "gyms": gym_names}
+    except Exception as e:
+        # This prevents ugly tracebacks and makes debugging easier.
+        print("Error computing recommendations:", repr(e))
+        # If something truly unexpected happens, still return a clean message.
+        raise HTTPException(status_code=500, detail="Internal recommender error")
