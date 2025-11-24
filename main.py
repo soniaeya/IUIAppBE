@@ -5,6 +5,7 @@ from typing import Optional
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi import Query
 
 from models import (
     Preferences,
@@ -76,7 +77,7 @@ current_user = UserState()
 # -------------------------------------------------
 class LocationUpdateRequest(BaseModel):
     user_id: str
-    location: MapLocation
+    location: MapLocation  # uses your existing MapLocation model
 
 
 class TimeUpdateRequest(BaseModel):
@@ -220,8 +221,24 @@ def save_location(loc: MapLocation):
     """
     Body MUST be: { "latitude": <float>, "longitude": <float> }
     """
-    # if you have current_user:
-    # current_user.set_location(loc.latitude, loc.longitude)
+    if not current_user.user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+
+    # Update in-memory session
+    current_user.set_location(loc.latitude, loc.longitude)
+
+    # OPTIONAL: also persist to Mongo
+    users_collection.update_one(
+        {"_id": ObjectId(current_user.user_id)},
+        {
+            "$set": {
+                "location": {
+                    "latitude": loc.latitude,
+                    "longitude": loc.longitude,
+                }
+            }
+        },
+    )
 
     print("User location:", loc.latitude, loc.longitude)
 
@@ -234,35 +251,6 @@ def save_location(loc: MapLocation):
     }
 
 
-@app.put("/user/location", response_model=UserOut)
-def api_update_location(payload: LocationUpdateRequest):
-    """
-    Writes the location into the user's MongoDB document.
-    """
-    result = users_collection.update_one(
-        {"_id": ObjectId(payload.user_id)},
-        {
-            "$set": {
-                "location": {
-                    "latitude": payload.location.latitude,
-                    "longitude": payload.location.longitude,
-                }
-            }
-        },
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Also mirror into current_user if this is the active one
-    if current_user.user_id == payload.user_id:
-        current_user.set_location(
-            payload.location.latitude,
-            payload.location.longitude,
-        )
-
-    saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
-    return user_doc_to_out(saved)
 
 
 # -------------------------------------------------
@@ -346,3 +334,99 @@ def get_recommendations():
         "status": "ok",
         "gyms": gym_names,
     }
+
+
+
+
+# -------------------------------------------------
+# Location endpoints
+# -------------------------------------------------
+
+@app.post("/map/location")
+def save_location(loc: MapLocation):
+    """
+    Body MUST be: { "latitude": <float>, "longitude": <float> }
+    Also stores location on the currently logged-in user.
+    """
+    if not current_user.user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+
+    # Update in-memory session
+    current_user.set_location(loc.latitude, loc.longitude)
+
+    # Persist to Mongo
+    users_collection.update_one(
+        {"_id": ObjectId(current_user.user_id)},
+        {
+            "$set": {
+                "location": {
+                    "latitude": loc.latitude,
+                    "longitude": loc.longitude,
+                }
+            }
+        },
+    )
+
+    print("User location:", loc.latitude, loc.longitude)
+
+    return {
+        "status": "ok",
+        "user_location": {
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+        },
+    }
+
+
+@app.get("/user/location", response_model=MapLocation)
+def api_get_location(user_id: str = Query(...)):
+    """
+    Returns the stored location for a user.
+    Frontend calls:
+      GET /user/location?user_id=<mongo_id_string>
+    """
+    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    loc = user.get("location")
+    if not loc:
+        raise HTTPException(status_code=404, detail="Location not set")
+
+    # loc is {"latitude": ..., "longitude": ...}
+    return MapLocation(**loc)
+
+
+@app.put("/user/location", response_model=UserOut)
+def api_update_location(payload: LocationUpdateRequest):
+    """
+    Writes the location into the user's MongoDB document.
+    Body:
+    {
+      "user_id": "...",
+      "location": { "latitude": 45.5, "longitude": -73.56 }
+    }
+    """
+    loc = payload.location
+
+    result = users_collection.update_one(
+        {"_id": ObjectId(payload.user_id)},
+        {
+            "$set": {
+                "location": {
+                    "latitude": loc.latitude,
+                    "longitude": loc.longitude,
+                }
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Also mirror into in-memory current_user
+    if current_user.user_id == payload.user_id:
+        current_user.set_location(loc.latitude, loc.longitude)
+
+    saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
+    return user_doc_to_out(saved)
