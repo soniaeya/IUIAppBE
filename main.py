@@ -430,3 +430,42 @@ def api_update_location(payload: LocationUpdateRequest):
 
     saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
     return user_doc_to_out(saved)
+
+# models.py (or wherever your Pydantic models are)
+from pydantic import BaseModel
+
+class UpdateLocation(BaseModel):
+    user_id: str           # or omit if you rely only on current_user
+    latitude: float
+    longitude: float
+    name: str | None = None
+
+
+@app.put("/user/location")
+def update_location(payload: UpdateLocation):
+    # Optional: update in DB
+    try:
+        _id = ObjectId(payload.user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    result = users_collection.update_one(
+        {"_id": _id},
+        {"$set": {
+            "location": {
+                "lat": payload.latitude,
+                "lng": payload.longitude,
+                "name": payload.name,
+            }
+        }},
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Also update in-memory current_user (if you’re using that)
+    if current_user.user_id == payload.user_id:
+        current_user.latitude = payload.latitude
+        current_user.longitude = payload.longitude
+
+    return {"status": "ok"}

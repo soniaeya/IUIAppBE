@@ -201,18 +201,7 @@
     "latitude": 45.4659,
     "longitude": -73.579
   },
-  {
-    "name": "The Ring",
-    "type": "Boxing",
-    "level": [
-      1,
-      2
-    ],
-    "env": "Indoor",
-    "address": "1037 Avenue Van Horne, Outremont, QC H2V 1J4",
-    "latitude": 45.524,
-    "longitude": -73.609
-  },
+
   {
     "name": "Silver Tooth",
     "type": "Boxing",
