@@ -20,15 +20,23 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+
+
+from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel
+
 class MapLocation(BaseModel):
     latitude: float
     longitude: float
 
+class RatingIn(BaseModel):
+    user_id: str
+    place_id: str
+    gym_name: str
+    rating: int   # 1–5
 
-
-from pydantic import BaseModel
-from datetime import datetime
-from typing import List, Optional
 
 class Preferences(BaseModel):
     activities: List[str] = []                # all active toggles
@@ -36,7 +44,12 @@ class Preferences(BaseModel):
     intensity: Optional[str] = None           # e.g. "Low", "Medium", "High"
     time: datetime
 
-
+class PreferencesIn(BaseModel):
+    user_id: str                  # from frontend
+    activities: List[str]         # ["Boxing", "Relax", ...]
+    env: str                      # "Indoor" / "Outdoor"
+    intensity: str                # "Beginner", "Advanced", etc.
+    time: datetime                # ISO string → datetime
 # ----------------------------------
 # Auth / Users
 # ----------------------------------
@@ -64,3 +77,11 @@ class UserOut(BaseModel):
 class UpdatePreferencesRequest(BaseModel):
     user_id: str               # who are we updating?
     preferences: Preferences
+
+# models.py
+from pydantic import BaseModel, Field
+
+class Rating(BaseModel):
+    user_id: str                 # Mongo _id of the user as a string
+    gym_name: str                # name from GYMS[i]["name"]
+    rating: int = Field(ge=1, le=5)  # 1–5 stars, adjust if you want 0–10 etc.

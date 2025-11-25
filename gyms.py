@@ -202,18 +202,7 @@ GYMS = [
     "latitude": 45.4659,
     "longitude": -73.579
   },
-  {
-    "name": "The Ring",
-    "type": "Boxing",
-    "level": [
-      1,
-      2
-    ],
-    "env": "Indoor",
-    "address": "1037 Avenue Van Horne, Outremont, QC H2V 1J4",
-    "latitude": 45.524,
-    "longitude": -73.609
-  },
+
   {
     "name": "Silver Tooth",
     "type": "Boxing",
@@ -227,19 +216,7 @@ GYMS = [
     "latitude": 45.4613,
     "longitude": -73.6015
   },
-  {
-    "name": "Puncher",
-    "type": "Boxing",
-    "level": [
-      1,
-      2,
-      3
-    ],
-    "env": "Indoor",
-    "address": "5139 Rue de Verdun, Montréal, QC",
-    "latitude": 45.453,
-    "longitude": -73.568
-  },
+
   {
     "name": "Academy Ness Martial",
     "type": "Boxing",
@@ -413,7 +390,16 @@ GYMS = [
     "address": "1418 Rue Crescent, Montréal, QC H3G 2B7",
     "latitude": 45.4905,
     "longitude": -73.579
-  }
+  },
+    {
+        "name": "Joes Panini 24h",
+        "type": "Eat",
+        "level": [1, 2, 3],
+        "env": "Indoor",
+        "address": "1404 Drummond St, Montréal, QC H3G 1P3",
+        "latitude": 45.4989159136213,
+        "longitude": -73.57483428948704
+    }
 
 
 

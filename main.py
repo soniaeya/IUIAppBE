@@ -6,6 +6,7 @@ from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi import Query
+from pymongo.errors import DuplicateKeyError
 
 from models import (
     Preferences,
@@ -15,8 +16,10 @@ from models import (
     LoginRequest,
     MapSearch,
     UpdatePreferencesRequest,
+    Rating, PreferencesIn, RatingIn
 )
 from mongodb import users_collection
+from mongodb import ratings_collection
 from recommender_system import gyms_for_preferences
 
 
@@ -114,27 +117,46 @@ def user_doc_to_out(doc) -> UserOut:
 def root():
     return {"message": "API is running"}
 
-
+@app.get("/routes")
+def list_routes():
+    return [{"path"}]
 # -------------------------------------------------
 # Preferences: mobile POST (session) + DB PUT (by user_id)
 # -------------------------------------------------
+
 @app.post("/api/preferences/")
-def save_preferences(prefs: Preferences):
+def save_preferences(prefs: PreferencesIn):
     """
-    Called by the mobile app when the user saves preferences
-    on the Preferences screen.
-
-    - Updates in-memory current_user
-    - Returns what was saved
+    Save the user's activity preferences into their user document in MongoDB.
     """
-    current_user.set_preferences(prefs)
 
-    print("Activities:", current_user.activities)
-    print("Env:", current_user.env)
-    print("Intensity:", current_user.intensity)
-    print("Time:", current_user.time)
+    # 1) validate user_id is a proper ObjectId
+    try:
+        user_obj_id = ObjectId(prefs.user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    return {"status": "ok", "saved": prefs.model_dump()}
+    # 2) make sure user exists
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 3) build preferences document
+    prefs_doc = {
+        "activities": prefs.activities,
+        "env": prefs.env,
+        "intensity": prefs.intensity,
+        "time": prefs.time,
+    }
+
+    # 4) save into user document
+    users_collection.update_one(
+        {"_id": user_obj_id},
+        {"$set": {"preferences": prefs_doc}},
+    )
+
+    return {"status": "ok", "preferences": prefs_doc}
+
 
 
 @app.put("/user/preferences")
@@ -312,29 +334,54 @@ def api_update_weather(payload: WeatherUpdateRequest):
 # Recommendations
 # -------------------------------------------------
 @app.get("/recommendations")
-def get_recommendations():
+def recommendations(user_id: str = Query(..., description="Mongo _id of the user as a string")):
     """
-    Uses current_user's in-memory preferences + location to
-    get a list of matching gym names from recommender_system.gyms_for_preferences.
-    """
-    if not current_user.activities or not current_user.env or not current_user.intensity:
-        raise HTTPException(status_code=400, detail="User preferences not set")
+    Return a list of gym names recommended for this user.
 
+    It:
+    - looks up the user by user_id in MongoDB
+    - reads user['preferences'] (activities, env, intensity, time)
+    - optionally uses user['location'] for distance sorting
+    - calls gyms_for_preferences(...)
+    """
+
+    # 1) Validate ObjectId
+    try:
+        user_obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # 2) Find user
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 3) Ensure preferences exist
+    prefs = user.get("preferences")
+    if not prefs:
+        # You can use 204 or 400; I’ll use 400 with a clear message
+        raise HTTPException(status_code=400, detail="Preferences not set for this user")
+
+    activities = prefs.get("activities") or []
+    env = prefs.get("env")
+    intensity = prefs.get("intensity")
+
+    # 4) Optional: read location if you store it like:
+    # user["location"] = {"latitude": 45.5, "longitude": -73.6}
+    location = user.get("location") or {}
+    user_lat = location.get("latitude")
+    user_lon = location.get("longitude")
+
+    # 5) Call your recommender
     gym_names = gyms_for_preferences(
-        activities=current_user.activities,
-        env=current_user.env,
-        intensity=current_user.intensity,
-        user_lat=current_user.latitude,
-        user_lon=current_user.longitude,
+        activities=activities,
+        env=env,
+        intensity=intensity,
+        user_lat=user_lat,
+        user_lon=user_lon,
     )
 
-    print("Matched locations:", gym_names)
-
-    return {
-        "status": "ok",
-        "gyms": gym_names,
-    }
-
+    return {"recommendations": gym_names}
 
 
 
@@ -342,40 +389,6 @@ def get_recommendations():
 # Location endpoints
 # -------------------------------------------------
 
-@app.post("/map/location")
-def save_location(loc: MapLocation):
-    """
-    Body MUST be: { "latitude": <float>, "longitude": <float> }
-    Also stores location on the currently logged-in user.
-    """
-    if not current_user.user_id:
-        raise HTTPException(status_code=401, detail="Not logged in")
-
-    # Update in-memory session
-    current_user.set_location(loc.latitude, loc.longitude)
-
-    # Persist to Mongo
-    users_collection.update_one(
-        {"_id": ObjectId(current_user.user_id)},
-        {
-            "$set": {
-                "location": {
-                    "latitude": loc.latitude,
-                    "longitude": loc.longitude,
-                }
-            }
-        },
-    )
-
-    print("User location:", loc.latitude, loc.longitude)
-
-    return {
-        "status": "ok",
-        "user_location": {
-            "latitude": loc.latitude,
-            "longitude": loc.longitude,
-        },
-    }
 
 
 @app.get("/user/location", response_model=MapLocation)
@@ -431,41 +444,76 @@ def api_update_location(payload: LocationUpdateRequest):
     saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
     return user_doc_to_out(saved)
 
-# models.py (or wherever your Pydantic models are)
-from pydantic import BaseModel
-
-class UpdateLocation(BaseModel):
-    user_id: str           # or omit if you rely only on current_user
-    latitude: float
-    longitude: float
-    name: str | None = None
 
 
-@app.put("/user/location")
-def update_location(payload: UpdateLocation):
-    # Optional: update in DB
+@app.post("/api/ratings/")
+def save_rating(rating: RatingIn):
+    """
+    Upsert a rating for (user_id, place_id).
+    If the user rates the same place again, just update the rating.
+    """
     try:
-        _id = ObjectId(payload.user_id)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
+        result = ratings_collection.update_one(
+            {"user_id": rating.user_id, "place_id": rating.place_id},  # 🔑 match on user+place
+            {
+                "$set": {
+                    "user_id": rating.user_id,
+                    "place_id": rating.place_id,
+                    "gym_name": rating.gym_name,
+                    "rating": rating.rating,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            upsert=True,
+        )
 
-    result = users_collection.update_one(
-        {"_id": _id},
-        {"$set": {
-            "location": {
-                "lat": payload.latitude,
-                "lng": payload.longitude,
-                "name": payload.name,
-            }
-        }},
-    )
+        return {
+            "status": "ok",
+            "matched": result.matched_count,
+            "modified": result.modified_count,
+            "upserted_id": str(result.upserted_id) if result.upserted_id else None,
+        }
 
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
+    except DuplicateKeyError as e:
+        # This should not normally happen if the filter uses user_id+place_id,
+        # but just in case, fall back to a plain update.
+        print("DuplicateKeyError in /api/ratings/:", e)
+        ratings_collection.update_one(
+            {"user_id": rating.user_id, "place_id": rating.place_id},
+            {
+                "$set": {
+                    "gym_name": rating.gym_name,
+                    "rating": rating.rating,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            upsert=False,
+        )
+        return {"status": "ok", "note": "resolved duplicate key"}
 
-    # Also update in-memory current_user (if you’re using that)
-    if current_user.user_id == payload.user_id:
-        current_user.latitude = payload.latitude
-        current_user.longitude = payload.longitude
+    except Exception as e:
+        print("Unexpected error in /api/ratings/:", e)
+        raise HTTPException(status_code=500, detail="Error saving rating")
 
-    return {"status": "ok"}
+
+@app.get("/api/ratings/")
+def get_ratings(user_id: str = Query(..., description="Mongo _id of the user as a string")):
+    """
+    Return all ratings for a given user as:
+    {
+      "ratings": {
+        "<place_id_1>": 4,
+        "<place_id_2>": 5,
+        ...
+      }
+    }
+    """
+    docs = list(ratings_collection.find({"user_id": user_id}))
+
+    ratings_map = {
+        doc["place_id"]: doc.get("rating")
+        for doc in docs
+        if doc.get("place_id") is not None
+    }
+
+    return {"ratings": ratings_map}
