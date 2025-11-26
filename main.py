@@ -109,6 +109,7 @@ def user_doc_to_out(doc) -> UserOut:
     )
 
 
+
 # -------------------------------------------------
 # Root
 # -------------------------------------------------
@@ -145,7 +146,7 @@ def save_preferences(prefs: PreferencesIn):
         "activities": prefs.activities,
         "env": prefs.env,
         "intensity": prefs.intensity,
-        "time": prefs.time,
+        "time": prefs.time,        # ✅ datetime in Mongo
     }
 
     # 4) save into user document
@@ -160,15 +161,9 @@ def save_preferences(prefs: PreferencesIn):
 
 @app.put("/user/preferences")
 def update_preferences(data: UpdatePreferencesRequest):
-    """
-    Writes preferences into the user's document in MongoDB.
-    """
     user_id = data.user_id
-    prefs = data.preferences.model_dump()
-
-    # Convert datetime to ISO for Mongo
-    if prefs.get("time"):
-        prefs["time"] = prefs["time"].isoformat()
+    prefs = data.preferences.model_dump()          # `time` is already datetime
+    # no isoformat here
 
     result = users_collection.update_one(
         {"_id": ObjectId(user_id)},
@@ -279,15 +274,12 @@ def save_location(loc: MapLocation):
 # -------------------------------------------------
 @app.put("/user/time", response_model=UserOut)
 def api_update_time(payload: TimeUpdateRequest):
-    """
-    Updates only the time of day in the user's preferences.
-    """
     user = users_collection.find_one({"_id": ObjectId(payload.user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     prefs_doc = user.get("preferences") or {}
-    prefs_doc["time"] = payload.time.isoformat()
+    prefs_doc["time"] = payload.time              # ✅ store datetime
 
     users_collection.update_one(
         {"_id": ObjectId(payload.user_id)},

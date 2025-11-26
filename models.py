@@ -78,8 +78,6 @@ class UpdatePreferencesRequest(BaseModel):
     user_id: str               # who are we updating?
     preferences: Preferences
 
-# models.py
-from pydantic import BaseModel, Field
 
 class Rating(BaseModel):
     user_id: str                 # Mongo _id of the user as a string
