@@ -1,13 +1,14 @@
 # main.py
 from datetime import datetime, timezone
 
-from typing import Optional
+
+from typing import Optional, Dict           # ✅ add Dict here
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi import Query
 from pymongo.errors import DuplicateKeyError
-
+from gyms import GYMS                      # ✅ add this line
 from models import (
     Preferences,
     MapLocation,
@@ -364,6 +365,11 @@ def recommendations(user_id: str = Query(..., description="Mongo _id of the user
     user_lat = location.get("latitude")
     user_lon = location.get("longitude")
 
+    open_status: Dict[str, bool] = {
+        gym["name"]: True
+        for gym in GYMS
+    }
+
     # 5) Call your recommender
     gym_names = gyms_for_preferences(
         activities=activities,
@@ -372,11 +378,27 @@ def recommendations(user_id: str = Query(..., description="Mongo _id of the user
         user_lat=user_lat,
         user_lon=user_lon,
         user_id=user_id,  # 👈 so ratings influence this user
+        open_status=open_status,
     )
 
     return {"recommendations": gym_names}
 
 
+from fastapi import Query
+
+@app.get("/user/time")
+def api_get_time(user_id: str = Query(...)):
+    try:
+        user_obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prefs = user.get("preferences") or {}
+    return {"time": prefs.get("time")}
 
 # -------------------------------------------------
 # Location endpoints

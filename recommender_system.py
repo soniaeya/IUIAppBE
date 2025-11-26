@@ -161,6 +161,8 @@ def _match_intensity(gym: dict, intensity: Optional[str]) -> bool:
 # -----------------------------
 # Main API
 # -----------------------------
+from typing import List, Optional, Dict, Tuple
+
 
 def gyms_for_preferences(
     activities: Optional[List[str]],
@@ -170,13 +172,14 @@ def gyms_for_preferences(
     user_lon: Optional[float] = None,
     user_id: Optional[str] = None,
     top_k: int = 15,
+    open_status: Optional[Dict[str, bool]] = None,   # ✅ NEW
 ) -> List[str]:
     """
     Content-based recommendations:
     - filter by user's activities, env, intensity
     - adjust similarity by user's past ratings
-    - THEN recommend places that are *closest* to the user
-      (primary sort: distance asc, secondary: similarity desc)
+    - optionally use open_status to prefer *open* places first
+    - then distance, then similarity
     """
     user_vec = _encode_user(activities, env, intensity)
     user_ratings = _load_user_ratings(user_id)
@@ -186,13 +189,12 @@ def gyms_for_preferences(
         (name, r) for name, r in user_ratings.items() if r >= 4.0
     ]
 
-    # results will store (name, similarity_score, distance_km or None)
-    results: List[Tuple[str, float, Optional[float]]] = []
+    # results will store (name, similarity_score, distance_km, is_open)
+    results: List[Tuple[str, float, Optional[float], bool]] = []
 
     for gym in GYMS:
         # 1) HARD FILTERS based on preferences
         if activities:
-            # keep only gyms whose type is one of user's activities
             if gym.get("type") not in activities:
                 continue
 
@@ -208,7 +210,7 @@ def gyms_for_preferences(
         # 2) base similarity: user preferences vs gym
         base_sim = _cosine(user_vec, g_vec)
 
-        # 3) ratings-based boost: similar to gyms the user liked
+        # 3) ratings-based boost
         rating_boost = 0.0
         for liked_name, rating in liked_gyms:
             liked_vec = GYM_VECS.get(liked_name)
@@ -216,39 +218,53 @@ def gyms_for_preferences(
                 continue
 
             sim_to_liked = _cosine(g_vec, liked_vec)
-            # center rating around 3 (1..5 scale): 1→-2, 3→0, 5→+2
-            centered = rating - 3.0
+            centered = rating - 3.0      # 1..5 → -2..+2
             rating_boost += centered * sim_to_liked
 
-        alpha = 0.1  # small weight for rating influence
+        alpha = 0.1
         similarity_score = base_sim + alpha * rating_boost
 
         # 4) distance in km (if we know user location)
         dist_km: Optional[float] = None
         if user_lat is not None and user_lon is not None:
-            dist_km = _haversine(user_lat, user_lon,
-                                 gym["latitude"], gym["longitude"])
+            dist_km = _haversine(
+                user_lat, user_lon,
+                gym["latitude"], gym["longitude"]
+            )
 
-        results.append((name, similarity_score, dist_km))
+        # 5) open flag from open_status map (default: True)
+        is_open = True
+        if open_status is not None:
+            # default False if missing from dict
+            is_open = bool(open_status.get(name, False))
 
-    # 5) sort:
-    #    - if we have distances, primary key = distance asc, secondary = similarity desc
-    #    - otherwise, just sort by similarity desc
+        results.append((name, similarity_score, dist_km, is_open))
+
+    # 6) sort with "open first" behaviour
+    BIG = 1e9
     if user_lat is not None and user_lon is not None:
-        # gyms that somehow have no dist get shoved to the end with a large sentinel distance
-        BIG = 1e9
+        # sort key: (open first, distance asc, similarity desc)
         results.sort(
-            key=lambda x: ((x[2] if x[2] is not None else BIG), -x[1])
+            key=lambda x: (
+                0 if x[3] else 1,                           # open vs closed
+                x[2] if x[2] is not None else BIG,          # distance
+                -x[1],                                      # similarity
+            )
         )
     else:
-        results.sort(key=lambda x: x[1], reverse=True)
+        # no distance → (open first, similarity desc)
+        results.sort(
+            key=lambda x: (
+                0 if x[3] else 1,
+                -x[1],
+            )
+        )
 
-    # 6) filter out pure zero similarities (optional)
-    filtered = [name for (name, sim, _) in results if sim > 0]
+    # 7) filter out pure zero similarities (optional)
+    filtered = [name for (name, sim, _, _) in results if sim > 0]
 
-    # fallback: if everything was 0, just return in distance order / similarity order
     if not filtered:
-        filtered = [name for (name, _, _) in results]
+        filtered = [name for (name, _, _, _) in results]
 
     return filtered[:top_k]
 
