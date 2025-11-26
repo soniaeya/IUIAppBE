@@ -1,5 +1,6 @@
 # main.py
-from datetime import datetime
+from datetime import datetime, timezone
+
 from typing import Optional
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
@@ -526,17 +527,6 @@ def update_location(data: dict):
 
 @app.get("/api/preferences/")
 def get_preferences(user_id: str = Query(..., description="Mongo _id of the user as a string")):
-    """
-    Return the stored preferences for this user:
-    {
-      "preferences": {
-        "activities": [...],
-        "env": "...",
-        "intensity": "...",
-        "time": "2025-11-25T12:34:56.789Z"
-      }
-    }
-    """
     try:
         user_obj_id = ObjectId(user_id)
     except Exception:
@@ -548,8 +538,13 @@ def get_preferences(user_id: str = Query(..., description="Mongo _id of the user
 
     prefs = user.get("preferences")
     if not prefs:
-        # either return empty or 404 – up to you
-        # raise HTTPException(status_code=404, detail="Preferences not set")
         return {"preferences": None}
+
+    # 🔧 Normalize time to UTC ISO with Z so the frontend interprets it correctly
+    t = prefs.get("time")
+    if isinstance(t, datetime):
+        # Mongo gives us a naive datetime that is actually UTC
+        t_utc = t.replace(tzinfo=timezone.utc)
+        prefs["time"] = t_utc.isoformat().replace("+00:00", "Z")
 
     return {"preferences": prefs}

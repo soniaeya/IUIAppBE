@@ -471,7 +471,27 @@ GYMS = [
   "address": "120 The Esplanade, Toronto, ON M5E 1A9",
   "latitude": 43.6475,
   "longitude": -79.3746
-}
+},
+{
+  "name": "Lumpini Combat",
+  "type": "Savate",
+  "level": [1],
+  "env": "Indoor",
+  "address": "1351 Woodbine Ave, Toronto, ON M4C 4G4",
+  "latitude": 43.69668,
+  "longitude": -79.3173
+},
+{
+    "name": "Concordia",
+    "type": "Savate",
+    "level": [
+      1
+    ],
+    "env": "Indoor",
+    "address": "475 Avenue des Pins Ouest, Montréal, QC H2W 1S4",
+    "latitude": 45.5101,
+    "longitude": -73.5808
+  },
 
 
 
