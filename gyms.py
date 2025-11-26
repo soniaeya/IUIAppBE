@@ -399,7 +399,80 @@ GYMS = [
         "address": "1404 Drummond St, Montréal, QC H3G 1P3",
         "latitude": 45.4989159136213,
         "longitude": -73.57483428948704
-    }
+    },
+{
+  "name": "Downtown Toronto Boxing Club",
+  "type": "Boxing",
+  "level": [1, 2],
+  "env": "Indoor",
+  "address": "75 King St East, Toronto, ON M5C 2R1",
+  "latitude": 43.6489,
+  "longitude": -79.3769
+},
+{
+  "name": "Financial District Muay Thai",
+  "type": "Muay Thai",
+  "level": [1, 2, 3],
+  "env": "Indoor",
+  "address": "120 Adelaide St East, Toronto, ON M5C 1J3",
+  "latitude": 43.6493,
+  "longitude": -79.3758
+},
+{
+  "name": "Berczy Pocket Park",
+  "type": "Parks",
+  "level": [],
+  "env": "Outdoor",
+  "address": "35 Wellington St East, Toronto, ON M5E 1B1",
+  "latitude": 43.6479,
+  "longitude": -79.3757
+},
+{
+  "name": "St. Lawrence Commons Park",
+  "type": "Parks",
+  "level": [],
+  "env": "Outdoor",
+  "address": "85 The Esplanade, Toronto, ON M5E 1Z4",
+  "latitude": 43.6472,
+  "longitude": -79.3738
+},
+{
+  "name": "King Street Yoga Loft",
+  "type": "Relax",
+  "level": [],
+  "env": "Indoor",
+  "address": "60 King St East, Toronto, ON M5C 1G4",
+  "latitude": 43.6484,
+  "longitude": -79.3755
+},
+{
+  "name": "Front Street Spa & Wellness",
+  "type": "Relax",
+  "level": [],
+  "env": "Indoor",
+  "address": "90 Front St East, Toronto, ON M5E 1C4",
+  "latitude": 43.6481,
+  "longitude": -79.3729
+},
+{
+  "name": "Market Street Salad Bar",
+  "type": "Eat",
+  "level": [],
+  "env": "Indoor",
+  "address": "10 Market St, Toronto, ON M5E 1M6",
+  "latitude": 43.6480,
+  "longitude": -79.3718
+},
+{
+  "name": "Esplanade Noodles & Bowls",
+  "type": "Eat",
+  "level": [],
+  "env": "Indoor",
+  "address": "120 The Esplanade, Toronto, ON M5E 1A9",
+  "latitude": 43.6475,
+  "longitude": -79.3746
+}
+
 
 
 

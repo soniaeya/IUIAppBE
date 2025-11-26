@@ -1,7 +1,6 @@
 # main.py
 from datetime import datetime
 from typing import Optional
-
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -379,6 +378,7 @@ def recommendations(user_id: str = Query(..., description="Mongo _id of the user
         intensity=intensity,
         user_lat=user_lat,
         user_lon=user_lon,
+        user_id=user_id,  # 👈 so ratings influence this user
     )
 
     return {"recommendations": gym_names}
@@ -517,3 +517,47 @@ def get_ratings(user_id: str = Query(..., description="Mongo _id of the user as 
     }
 
     return {"ratings": ratings_map}
+
+
+@app.post("/api/update_location")
+def update_location(data: dict):
+    user_id = data["user_id"]
+    lat = data["lat"]
+    lon = data["lon"]
+
+    users_collection.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"last_lat": lat, "last_lon": lon}}
+    )
+
+    return {"status": "ok"}
+
+@app.get("/api/preferences/")
+def get_preferences(user_id: str = Query(..., description="Mongo _id of the user as a string")):
+    """
+    Return the stored preferences for this user:
+    {
+      "preferences": {
+        "activities": [...],
+        "env": "...",
+        "intensity": "...",
+        "time": "2025-11-25T12:34:56.789Z"
+      }
+    }
+    """
+    try:
+        user_obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prefs = user.get("preferences")
+    if not prefs:
+        # either return empty or 404 – up to you
+        # raise HTTPException(status_code=404, detail="Preferences not set")
+        return {"preferences": None}
+
+    return {"preferences": prefs}
