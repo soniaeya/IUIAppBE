@@ -92,3 +92,27 @@ class Rating(BaseModel):
     user_id: str
     gym_name: str
     rating: int = Field(ge=1, le=5)
+# -------------------------------------------------
+# Extra update models
+# -------------------------------------------------
+class LocationUpdateRequest(BaseModel):
+    user_id: str
+    location: MapLocation  # uses your existing MapLocation model
+
+
+class TimeUpdateRequest(BaseModel):
+    user_id: str
+    time: datetime
+
+
+class WeatherUpdateRequest(BaseModel):
+    user_id: str
+    main: str
+    description: Optional[str] = None
+    temp_c: Optional[float] = None
+
+
+class WeatherInfo(BaseModel):
+    main: str
+    description: Optional[str] = None
+    temp_c: Optional[float] = None

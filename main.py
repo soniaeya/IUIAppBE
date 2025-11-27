@@ -4,7 +4,6 @@ from typing import Optional, Dict
 
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
 from gyms import GYMS
@@ -18,9 +17,9 @@ from models import (
     UpdatePreferencesRequest,
     Rating,
     PreferencesIn,
-    RatingIn,
+    RatingIn, LocationUpdateRequest, TimeUpdateRequest, WeatherUpdateRequest, WeatherInfo,
 )
-from mongodb import users_collection, ratings_collection
+from mongodb import users_collection, ratings_collection, weather_collection
 from recommender_system import gyms_for_preferences
 
 
@@ -73,27 +72,11 @@ class UserState:
         self.weather_temp_c = temp_c
 
 
+
 current_user = UserState()
 
 
-# -------------------------------------------------
-# Extra update models
-# -------------------------------------------------
-class LocationUpdateRequest(BaseModel):
-    user_id: str
-    location: MapLocation  # uses your existing MapLocation model
 
-
-class TimeUpdateRequest(BaseModel):
-    user_id: str
-    time: datetime
-
-
-class WeatherUpdateRequest(BaseModel):
-    user_id: str
-    main: str
-    description: Optional[str] = None
-    temp_c: Optional[float] = None
 
 
 # -------------------------------------------------
@@ -412,37 +395,45 @@ def api_get_time(user_id: str = Query(...)):
     return {"time": prefs.get("time")}
 
 
-# -------------------------------------------------
-# Weather update
-# -------------------------------------------------
 @app.put("/user/weather")
 def api_update_weather(payload: WeatherUpdateRequest):
-    """
-    Stores the latest weather forecast for this user.
-    """
-    users_collection.update_one(
-        {"_id": ObjectId(payload.user_id)},
+
+    weather_collection.update_one(
+        {"user_id": payload.user_id},
         {
             "$set": {
-                "weather": {
-                    "main": payload.main,
-                    "description": payload.description,
-                    "temp_c": payload.temp_c,
-                    "updated_at": datetime.utcnow().isoformat(),
-                }
+                "user_id": payload.user_id,     # ★ VERY IMPORTANT
+                "main": payload.main,
+                "description": payload.description,
+                "temp_c": payload.temp_c,
+                "updated_at": datetime.utcnow(),
             }
         },
+        upsert=True
     )
-
-    if current_user.user_id == payload.user_id:
-        current_user.set_weather(payload.main, payload.description, payload.temp_c)
 
     return {"status": "ok", "weather": payload.dict()}
 
 
+@app.get("/user/weather", response_model=WeatherInfo)
+def api_get_weather(user_id: str = Query(..., description="Mongo user ID")):
+    doc = weather_collection.find_one({"user_id": user_id})
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Weather not found for user")
+
+    return WeatherInfo(
+        main=doc.get("main"),
+        description=doc.get("description"),
+        temp_c=doc.get("temp_c")
+    )
+
 # -------------------------------------------------
 # Recommendations
 # -------------------------------------------------
+
+
+
 @app.get("/recommendations")
 def recommendations(user_id: str = Query(..., description="Mongo _id of the user as a string")):
     """

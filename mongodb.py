@@ -9,6 +9,7 @@ db = client["iuiapp_db"]
 users_collection = db["users"]
 ratings_collection = db["ratings"]
 preferences_collection = db["preferences"]
+weather_collection = db["weather"]
 
 # 🔧 Make this idempotent – let Mongo reuse the existing index
 ratings_collection.create_index(
