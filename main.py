@@ -179,21 +179,31 @@ def save_preferences(prefs: PreferencesIn):
 
 @app.put("/user/preferences")
 def update_preferences(data: UpdatePreferencesRequest):
-    """
-    Explicit update of preferences for a user.
-    """
-    user_id = data.user_id
-    prefs = data.preferences.model_dump()  # `time` already datetime
+    try:
+        user_obj_id = ObjectId(data.user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    result = users_collection.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"preferences": prefs}},
-    )
-
-    if result.matched_count == 0:
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return {"status": "ok", "preferences": prefs}
+    prefs_doc = {
+        "activities": data.activities,
+        "env": data.env,
+        "intensity": data.intensity,
+        "time": data.time,   # datetime stored in Mongo
+    }
+
+    result = users_collection.update_one(
+        {"_id": user_obj_id},
+        {"$set": {"preferences": prefs_doc}}
+    )
+
+    print("Matched:", result.matched_count)
+    print("Modified:", result.modified_count)
+
+    return {"status": "ok", "preferences": prefs_doc}
 
 
 # -------------------------------------------------

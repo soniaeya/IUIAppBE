@@ -1,30 +1,29 @@
-
-# ----------------------------------
-# Preferences
-# ----------------------------------
 from enum import Enum
-
-class ActivityEnum(str, Enum):
-    boxing = "Boxing"
-    kickboxing = "Kickboxing"
-    bjj = "BJJ"
-    muay_thai = "Muay Thai"
-    judo = "Judo"
-    Wrestling = "Wrestling"
-
-
-
-
-
 from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 
+# ----------------------------------
+# Activity enum
+# ----------------------------------
+class ActivityEnum(str, Enum):
+    boxing = "Boxing"
+    muay_thai = "Muay Thai"   # fix spelling
+    savate = "Savate"
+    parks = "Parks"
+    relax = "Relax"
+    eat = "Eat"
+
+
+# ----------------------------------
+# Map / Ratings
+# ----------------------------------
 class MapLocation(BaseModel):
     latitude: float
     longitude: float
+
 
 class RatingIn(BaseModel):
     user_id: str
@@ -33,18 +32,26 @@ class RatingIn(BaseModel):
     rating: int   # 1–5
 
 
+# ----------------------------------
+# Preferences
+# ----------------------------------
 class Preferences(BaseModel):
-    activities: List[str] = []                # all active toggles
-    env: Optional[str] = None                 # "Indoor" / "Outdoor"
-    intensity: Optional[str] = None           # e.g. "Low", "Medium", "High"
-    time: datetime
+    # ⬇️ now uses the enum for validation
+    activities: List[str] = []         # all active toggles
+    env: Optional[str] = None                   # "Indoor" / "Outdoor"
+    intensity: Optional[str] = None             # e.g. "Low", "Medium", "High"
+    time: datetime                              # stored as datetime in Mongo
+
 
 class PreferencesIn(BaseModel):
-    user_id: str                  # from frontend
-    activities: List[str]         # ["Boxing", "Relax", ...]
-    env: str                      # "Indoor" / "Outdoor"
-    intensity: str                # "Beginner", "Advanced", etc.
-    time: datetime                # ISO string → datetime
+    # payload used by POST /api/preferences/ (if you still use it)
+    user_id: str
+    activities: List[str]
+    env: str
+    intensity: str
+    time: datetime
+
+
 # ----------------------------------
 # Auth / Users
 # ----------------------------------
@@ -69,12 +76,19 @@ class UserOut(BaseModel):
     name: str | None = None
     preferences: Preferences | None = None   # ⭐ attach preferences here
 
+
 class UpdatePreferencesRequest(BaseModel):
-    user_id: str               # who are we updating?
-    preferences: Preferences
+    user_id: str
+    activities: List[str]
+    env: str
+    intensity: str
+    time: datetime
 
 
+# ----------------------------------
+# Ratings
+# ----------------------------------
 class Rating(BaseModel):
-    user_id: str                 # Mongo _id of the user as a string
-    gym_name: str                # name from GYMS[i]["name"]
-    rating: int = Field(ge=1, le=5)  # 1–5 stars, adjust if you want 0–10 etc.
+    user_id: str
+    gym_name: str
+    rating: int = Field(ge=1, le=5)
