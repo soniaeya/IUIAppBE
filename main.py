@@ -119,74 +119,6 @@ def list_routes():
 # -------------------------------------------------
 # Preferences: POST create/update + PUT for explicit update
 # -------------------------------------------------
-@app.post("/api/preferences/")
-def save_preferences(prefs: PreferencesIn):
-    """
-    Save the user's activity preferences into their user document in MongoDB.
-    Body:
-    {
-      "user_id": "...",
-      "activities": [...],
-      "env": "...",
-      "intensity": "...",
-      "time": <ISO datetime string>
-    }
-    """
-    # 1) validate user_id is a proper ObjectId
-    try:
-        user_obj_id = ObjectId(prefs.user_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
-
-    # 2) make sure user exists
-    user = users_collection.find_one({"_id": user_obj_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # 3) build preferences document
-    prefs_doc = {
-        "activities": prefs.activities,
-        "env": prefs.env,
-        "intensity": prefs.intensity,
-        "time": prefs.time,  # datetime in Mongo
-    }
-
-    # 4) save into user document
-    users_collection.update_one(
-        {"_id": user_obj_id},
-        {"$set": {"preferences": prefs_doc}},
-    )
-
-    return {"status": "ok", "preferences": prefs_doc}
-
-
-@app.put("/user/preferences")
-def update_preferences(data: UpdatePreferencesRequest):
-    try:
-        user_obj_id = ObjectId(data.user_id)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
-
-    user = users_collection.find_one({"_id": user_obj_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    prefs_doc = {
-        "activities": data.activities,
-        "env": data.env,
-        "intensity": data.intensity,
-        "time": data.time,   # datetime stored in Mongo
-    }
-
-    result = users_collection.update_one(
-        {"_id": user_obj_id},
-        {"$set": {"preferences": prefs_doc}}
-    )
-
-    print("Matched:", result.matched_count)
-    print("Modified:", result.modified_count)
-
-    return {"status": "ok", "preferences": prefs_doc}
 
 
 # -------------------------------------------------
@@ -585,3 +517,73 @@ def get_preferences(user_id: str = Query(..., description="Mongo _id of the user
         prefs["time"] = t_utc.isoformat().replace("+00:00", "Z")
 
     return {"preferences": prefs}
+
+
+@app.post("/api/preferences/")
+def save_preferences(prefs: PreferencesIn):
+    """
+    Save the user's activity preferences into their user document in MongoDB.
+    Body:
+    {
+      "user_id": "...",
+      "activities": [...],
+      "env": "...",
+      "intensity": "...",
+      "time": <ISO datetime string>
+    }
+    """
+    # 1) validate user_id is a proper ObjectId
+    try:
+        user_obj_id = ObjectId(prefs.user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # 2) make sure user exists
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 3) build preferences document
+    prefs_doc = {
+        "activities": prefs.activities,
+        "env": prefs.env,
+        "intensity": prefs.intensity,
+        "time": prefs.time,  # datetime in Mongo
+    }
+
+    # 4) save into user document
+    users_collection.update_one(
+        {"_id": user_obj_id},
+        {"$set": {"preferences": prefs_doc}},
+    )
+
+    return {"status": "ok", "preferences": prefs_doc}
+
+
+@app.put("/user/preferences")
+def update_preferences(data: UpdatePreferencesRequest): # Directly use UpdatePreferencesRequest
+    try:
+        user_obj_id = ObjectId(data.user_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user = users_collection.find_one({"_id": user_obj_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    prefs_doc = {
+        "activities": data.activities,
+        "env": data.env,
+        "intensity": data.intensity,
+        "time": data.time,   # datetime stored in Mongo
+    }
+
+    result = users_collection.update_one(
+        {"_id": user_obj_id},
+        {"$set": {"preferences": prefs_doc}}
+    )
+
+    print("Matched:", result.matched_count)
+    print("Modified:", result.modified_count)
+
+    return {"status": "ok", "preferences": prefs_doc}

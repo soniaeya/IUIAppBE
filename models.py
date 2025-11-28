@@ -116,3 +116,4 @@ class WeatherInfo(BaseModel):
     main: str
     description: Optional[str] = None
     temp_c: Optional[float] = None
+
