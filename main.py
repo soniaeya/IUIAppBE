@@ -97,7 +97,7 @@ class WeatherUpdateRequest(BaseModel):
 # -------------------------------------------------
 def user_doc_to_out(doc) -> UserOut:
     prefs_doc = doc.get("preferences")
-    prefs_obj = Preferences(**prefs_doc) if prefs_doc else None
+    prefs_obj = PreferencesIn(**prefs_doc) if prefs_doc else None
 
     return UserOut(
         id=str(doc["_id"]),
