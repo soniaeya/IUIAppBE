@@ -8,13 +8,11 @@ from fastapi import Query
 from pymongo.errors import DuplicateKeyError
 
 from models import (
-    Preferences,
     MapLocation,
     UserCreate,
     UserOut,
     LoginRequest,
     MapSearch,
-    UpdatePreferencesRequest,
     Rating, PreferencesIn, RatingIn
 )
 from mongodb import users_collection
@@ -59,7 +57,7 @@ class UserState:
         self.latitude = lat
         self.longitude = lon
 
-    def set_preferences(self, prefs: Preferences):
+    def set_preferences(self, prefs: PreferencesIn):
         self.activities = prefs.activities
         self.env = prefs.env
         self.intensity = prefs.intensity
@@ -159,12 +157,13 @@ def save_preferences(prefs: PreferencesIn):
 
 
 @app.put("/user/preferences")
-def update_preferences(data: UpdatePreferencesRequest):
+def update_preferences(data: PreferencesIn):
     """
     Writes preferences into the user's document in MongoDB.
     """
     user_id = data.user_id
-    prefs = data.preferences.model_dump()
+    # print(data.preferences.activities)
+    prefs = data.model_dump()
 
     # Convert datetime to ISO for Mongo
     if prefs.get("time"):
@@ -389,8 +388,6 @@ def recommendations(user_id: str = Query(..., description="Mongo _id of the user
 # Location endpoints
 # -------------------------------------------------
 
-
-
 @app.get("/user/location", response_model=MapLocation)
 def api_get_location(user_id: str = Query(...)):
     """
@@ -443,8 +440,6 @@ def api_update_location(payload: LocationUpdateRequest):
 
     saved = users_collection.find_one({"_id": ObjectId(payload.user_id)})
     return user_doc_to_out(saved)
-
-
 
 @app.post("/api/ratings/")
 def save_rating(rating: RatingIn):

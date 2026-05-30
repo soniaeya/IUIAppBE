@@ -13,15 +13,6 @@ class ActivityEnum(str, Enum):
     Wrestling = "Wrestling"
 
 
-
-from pydantic import BaseModel
-from datetime import datetime
-from typing import List, Optional
-
-from pydantic import BaseModel
-
-
-
 from datetime import datetime
 from typing import List, Optional
 
@@ -36,13 +27,6 @@ class RatingIn(BaseModel):
     place_id: str
     gym_name: str
     rating: int   # 1–5
-
-
-class Preferences(BaseModel):
-    activities: List[str] = []                # all active toggles
-    env: Optional[str] = None                 # "Indoor" / "Outdoor"
-    intensity: Optional[str] = None           # e.g. "Low", "Medium", "High"
-    time: datetime
 
 class PreferencesIn(BaseModel):
     user_id: str                  # from frontend
@@ -72,11 +56,7 @@ class UserOut(BaseModel):
     id: str
     email: str
     name: str | None = None
-    preferences: Preferences | None = None   # ⭐ attach preferences here
-
-class UpdatePreferencesRequest(BaseModel):
-    user_id: str               # who are we updating?
-    preferences: Preferences
+    preferences: PreferencesIn | None = None   # ⭐ attach preferences here
 
 # models.py
 from pydantic import BaseModel, Field
